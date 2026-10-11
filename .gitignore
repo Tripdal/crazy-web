@@ -1,3 +1,7 @@
-node_modules/
-data/
+web/data/*
+!web/data/.htaccess
+!web/data/index.html
+web/uploads/*
+!web/uploads/.htaccess
+!web/uploads/index.html
 .env

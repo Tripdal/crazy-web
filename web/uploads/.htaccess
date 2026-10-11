@@ -1,0 +1,9 @@
+# Nahrané obrázky se nikdy nespouštějí jako skripty.
+<FilesMatch "\.(php\d?|phtml|phar|cgi|pl|py|sh)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Deny from all
+  </IfModule>
+</FilesMatch>

@@ -5,15 +5,17 @@
   const fmtDate = (iso) => new Date(iso).toLocaleDateString('cs-CZ', { day: 'numeric', month: 'numeric', year: 'numeric' });
   const fmtDateTime = (iso) => new Date(iso).toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-  async function api(url, opts = {}) {
+  // Volání API: api('admin/news') → /api.php?r=admin/news. Změny vždy přes POST.
+  async function api(route, opts = {}) {
     const isForm = opts.body instanceof FormData;
-    const res = await fetch(url, {
-      method: opts.method || 'GET',
-      headers: opts.body && !isForm ? { 'Content-Type': 'application/json' } : undefined,
-      body: opts.body ? (isForm ? opts.body : JSON.stringify(opts.body)) : undefined,
+    const post = opts.method === 'POST';
+    const res = await fetch('/api.php?r=' + route, {
+      method: post ? 'POST' : 'GET',
+      headers: post ? (isForm ? { 'X-CV': '1' } : { 'Content-Type': 'application/json', 'X-CV': '1' }) : undefined,
+      body: post ? (isForm ? opts.body : JSON.stringify(opts.body || {})) : undefined,
     });
     const data = await res.json().catch(() => ({}));
-    if (res.status === 401 && !url.endsWith('/login')) showLogin();
+    if (res.status === 401 && route !== 'admin/login') showLogin();
     if (!res.ok) throw new Error(data.error || 'Něco se pokazilo, zkuste to znovu.');
     return data;
   }
@@ -49,15 +51,15 @@
   }
 
   // ---------------- Nahrávání obrázků ----------------
-  async function uploadFile(file, opts = '') {
+  async function uploadFile(file) {
     const fd = new FormData();
     fd.append('file', file);
-    const { url } = await api('/api/admin/upload' + opts, { method: 'POST', body: fd });
+    const { url } = await api('admin/upload', { method: 'POST', body: fd });
     return url;
   }
 
   // Klikací / přetahovací pole pro obrázek.
-  function dropzone(el, { onChange, query = '' }) {
+  function dropzone(el, { onChange }) {
     const input = $('input[type=file]', el);
     const img = $('img', el);
     const remove = $('.dropzone__remove', el);
@@ -71,7 +73,7 @@
       if (!file.type.startsWith('image/')) return toast('Vyberte prosím obrázek.', 'err');
       el.classList.add('dropzone--busy');
       try {
-        const url = await uploadFile(file, query);
+        const url = await uploadFile(file);
         set(url);
         onChange(url);
       } catch (err) { fail(err); }
@@ -158,30 +160,46 @@
 
   // ---------------- Přihlášení ----------------
   let started = false;
-  function showLogin() {
+  let setupMode = false;
+  function showLogin(needsSetup = false) {
+    setupMode = needsSetup === true;
+    const f = $('#loginForm');
     $('#app').hidden = true;
     $('#login').hidden = false;
-    $('#loginForm').password.focus();
+    // Při úplně prvním spuštění si administrátor heslo nastaví sám.
+    $('h1', f).textContent = setupMode ? 'Vítejte!' : 'Administrace';
+    $('p', f).textContent = setupMode
+      ? 'Web je nahraný. Teď si zvolte heslo do administrace (alespoň 6 znaků) a dobře si ho zapamatujte.'
+      : 'Zadejte heslo a můžete začít upravovat web.';
+    f.password.placeholder = setupMode ? 'Nové heslo' : 'Heslo';
+    f.password.autocomplete = setupMode ? 'new-password' : 'current-password';
+    f.password2.hidden = !setupMode;
+    f.password2.required = setupMode;
+    $('button', f).textContent = setupMode ? 'Nastavit heslo a pokračovat' : 'Přihlásit se';
+    f.password.focus();
   }
 
   $('#loginForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const btn = $('button', e.target);
-    btn.disabled = true;
+    const f = e.target;
+    const btn = $('button', f);
     $('#loginError').textContent = '';
+    if (setupMode && f.password.value !== f.password2.value) return ($('#loginError').textContent = 'Hesla se neshodují.');
+    btn.disabled = true;
     try {
-      await api('/api/admin/login', { method: 'POST', body: { password: e.target.password.value } });
-      e.target.reset();
+      await api(setupMode ? 'admin/setup' : 'admin/login', { method: 'POST', body: { password: f.password.value } });
+      f.reset();
       start();
     } catch (err) {
       $('#loginError').textContent = err.message;
+      if (setupMode) api('admin/me').then((r) => showLogin(r.needsSetup));
     }
     btn.disabled = false;
   });
 
   $('#logout').addEventListener('click', async () => {
     if (newsDirty() && !(await confirmDialog('Neuložené změny', 'Máte rozepsanou aktualitu. Opravdu se odhlásit?', 'Odhlásit'))) return;
-    await api('/api/admin/logout', { method: 'POST' });
+    await api('admin/logout', { method: 'POST' });
     location.reload();
   });
 
@@ -235,7 +253,7 @@
   }
 
   async function loadNews() {
-    newsItems = await api('/api/admin/news');
+    newsItems = await api('admin/news');
     renderNewsList();
   }
 
@@ -274,9 +292,7 @@
     const btn = $('button[type=submit]', form);
     btn.disabled = true;
     try {
-      const saved = current.id
-        ? await api(`/api/admin/news/${current.id}`, { method: 'PUT', body: data })
-        : await api('/api/admin/news', { method: 'POST', body: data });
+      const saved = await api('admin/news/save', { method: 'POST', body: { ...data, id: current.id || '' } });
       await loadNews();
       editNews(saved);
       toast(saved.published ? 'Uloženo a zveřejněno 🎉' : 'Uloženo jako koncept');
@@ -288,7 +304,7 @@
     if (!current?.id) return;
     if (!(await confirmDialog('Smazat aktualitu?', `„${current.title}“ bude nenávratně odstraněna.`))) return;
     try {
-      await api(`/api/admin/news/${current.id}`, { method: 'DELETE' });
+      await api('admin/news/delete', { method: 'POST', body: { id: current.id } });
       current = null;
       form.hidden = true;
       $('#newsEmpty').hidden = false;
@@ -314,7 +330,7 @@
   let editingGroup = null;
 
   async function loadGroups() {
-    try { groups = await api('/api/admin/groups'); renderGroups(); } catch (err) { fail(err); }
+    try { groups = await api('admin/groups'); renderGroups(); } catch (err) { fail(err); }
   }
 
   function renderGroups() {
@@ -346,7 +362,7 @@
     const btn = $('button', f);
     btn.disabled = true;
     try {
-      await api('/api/admin/groups', { method: 'POST', body: { name: f.name.value, description: f.description.value } });
+      await api('admin/groups/save', { method: 'POST', body: { name: f.name.value, description: f.description.value } });
       f.reset();
       toast('Skupina vytvořena');
       await loadGroups();
@@ -364,7 +380,7 @@
     if (b.dataset.act === 'open') openDrawer(g);
     if (b.dataset.act === 'delete') {
       if (!(await confirmDialog('Smazat skupinu?', `Skupina „${g.name}“ a všech ${g.messageCount} zpráv v ní bude nenávratně odstraněno.`))) return;
-      try { await api(`/api/admin/groups/${g.id}`, { method: 'DELETE' }); toast('Skupina smazána'); loadGroups(); } catch (err) { fail(err); }
+      try { await api('admin/groups/delete', { method: 'POST', body: { group: g.id } }); toast('Skupina smazána'); loadGroups(); } catch (err) { fail(err); }
     }
   });
 
@@ -372,7 +388,7 @@
     e.preventDefault();
     const f = e.target;
     try {
-      await api(`/api/admin/groups/${f.dataset.edit}`, { method: 'PUT', body: { name: f.name.value, description: f.description.value } });
+      await api('admin/groups/save', { method: 'POST', body: { id: f.dataset.edit, name: f.name.value, description: f.description.value } });
       editingGroup = null;
       toast('Uloženo');
       loadGroups();
@@ -387,7 +403,7 @@
     $('#adminCompose').text.focus();
   }
   async function loadMessages() {
-    const msgs = await api(`/api/admin/groups/${drawerGroup.id}/messages`).catch((err) => (fail(err), []));
+    const msgs = await api(`admin/messages&group=${drawerGroup.id}`).catch((err) => (fail(err), []));
     const list = $('#adminMsgs');
     list.innerHTML = msgs.length
       ? msgs.map((m) => `
@@ -405,14 +421,14 @@
     if (e.target.closest('[data-close-drawer]')) { $('#drawer').hidden = true; loadGroups(); return; }
     const del = e.target.closest('[data-del]');
     if (del && (await confirmDialog('Smazat zprávu?', 'Zpráva zmizí i návštěvníkům webu.'))) {
-      try { await api(`/api/admin/groups/${drawerGroup.id}/messages/${del.dataset.del}`, { method: 'DELETE' }); loadMessages(); } catch (err) { fail(err); }
+      try { await api('admin/messages/delete', { method: 'POST', body: { group: drawerGroup.id, id: del.dataset.del } }); loadMessages(); } catch (err) { fail(err); }
     }
   });
   $('#adminCompose').addEventListener('submit', async (e) => {
     e.preventDefault();
     const ta = e.target.text;
     try {
-      await api(`/api/admin/groups/${drawerGroup.id}/messages`, { method: 'POST', body: { text: ta.value } });
+      await api('admin/messages/send', { method: 'POST', body: { group: drawerGroup.id, text: ta.value } });
       ta.value = '';
       loadMessages();
     } catch (err) { fail(err); }
@@ -443,13 +459,13 @@
     e.preventDefault();
     const body = { ...settings, about: aboutEditor.html };
     ['siteName', 'tagline', 'contactEmail', 'contactPhone', 'address', 'trainingTimes', 'facebookUrl', 'instagramUrl'].forEach((k) => (body[k] = sForm[k].value));
-    try { fillSettings(await api('/api/admin/settings', { method: 'PUT', body })); toast('Nastavení uloženo'); } catch (err) { fail(err); }
+    try { fillSettings(await api('admin/settings', { method: 'POST', body })); toast('Nastavení uloženo'); } catch (err) { fail(err); }
   });
 
   $('#passwordForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const f = e.target;
-    try { await api('/api/admin/password', { method: 'POST', body: { current: f.current.value, next: f.next.value } }); f.reset(); toast('Heslo změněno'); } catch (err) { fail(err); }
+    try { await api('admin/password', { method: 'POST', body: { current: f.current.value, next: f.next.value } }); f.reset(); toast('Heslo změněno'); } catch (err) { fail(err); }
   });
 
   // =============================================================
@@ -465,17 +481,17 @@
       newsEditor.quill.on('text-change', setStatus);
       form.addEventListener('input', setStatus);
       coverZone = dropzone($('#coverDrop'), { onChange: (url) => { current.cover = url; setStatus(); } });
-      imageZones.logo = dropzone($('[data-img-field=logo]'), { query: '?logo=1', onChange: (url) => (settings.logo = url || '/img/logo.svg') });
+      imageZones.logo = dropzone($('[data-img-field=logo]'), { onChange: (url) => (settings.logo = url || '/img/logo.svg') });
       imageZones.heroImage = dropzone($('[data-img-field=heroImage]'), { onChange: (url) => (settings.heroImage = url) });
     }
     const tab = location.hash.slice(1);
     openTab(['news', 'chats', 'settings'].includes(tab) ? tab : 'news');
     try {
-      const [site] = await Promise.all([api('/api/site'), loadNews()]);
+      const [site] = await Promise.all([api('site'), loadNews()]);
       fillSettings(site.settings);
     } catch (err) { fail(err); }
   }
 
-  fetch('/api/site').then((r) => r.json()).then(({ settings: s }) => $$('[data-logo]').forEach((el) => (el.src = s.logo))).catch(() => {});
-  api('/api/admin/me').then(({ admin }) => (admin ? start() : showLogin())).catch(showLogin);
+  fetch('/api.php?r=site').then((r) => r.json()).then(({ settings: s }) => $$('[data-logo]').forEach((el) => (el.src = s.logo))).catch(() => {});
+  api('admin/me').then(({ admin, needsSetup }) => (admin ? start() : showLogin(needsSetup))).catch(() => showLogin());
 })();

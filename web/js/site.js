@@ -11,11 +11,12 @@
       : d.toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  async function api(url, opts = {}) {
-    const res = await fetch(url, {
-      ...opts,
-      headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
-      body: opts.body ? JSON.stringify(opts.body) : undefined,
+  // Volání API: api('chat/groups') → /api.php?r=chat/groups
+  async function api(route, opts = {}) {
+    const res = await fetch('/api.php?r=' + route, {
+      method: opts.method || 'GET',
+      headers: opts.method === 'POST' ? { 'Content-Type': 'application/json', 'X-CV': '1' } : undefined,
+      body: opts.method === 'POST' ? JSON.stringify(opts.body || {}) : undefined,
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw Object.assign(new Error(data.error || 'Něco se pokazilo.'), { status: res.status });
@@ -80,7 +81,7 @@
       : '<div class="news__empty">Zatím tu nejsou žádné aktuality. Brzy se to změní! 💃</div>';
   }
 
-  const siteLoaded = api('/api/site')
+  const siteLoaded = api('site')
     .then(renderSite)
     .catch(() => ($('#newsList').innerHTML = '<div class="news__empty">Nepodařilo se načíst aktuality.</div>'));
 
@@ -119,7 +120,7 @@
   // ---------------- Chat ----------------
   const chat = $('#chat');
   const views = { join: $('#chatJoin'), groups: $('#chatGroups'), room: $('#chatRoom') };
-  const state = { me: null, myId: null, group: null, source: null, unread: 0 };
+  const state = { me: null, group: null, since: 0, timer: null, unread: 0 };
 
   function show(view) {
     Object.entries(views).forEach(([k, el]) => (el.hidden = k !== view));
@@ -156,7 +157,7 @@
   async function boot() {
     if (booted) return;
     booted = true;
-    state.me = await api('/api/chat/me').catch(() => null);
+    state.me = await api('chat/me').catch(() => null);
     if (state.me) showGroups();
     else show('join');
   }
@@ -166,7 +167,7 @@
     const f = new FormData(views.join);
     $('#joinError').textContent = '';
     try {
-      state.me = await api('/api/chat/join', { method: 'POST', body: { name: f.get('name'), email: f.get('email'), consent: !!f.get('consent') } });
+      state.me = await api('chat/join', { method: 'POST', body: { name: f.get('name'), email: f.get('email'), consent: !!f.get('consent') } });
       showGroups();
     } catch (err) {
       $('#joinError').textContent = err.message;
@@ -174,7 +175,7 @@
   });
 
   $('#chatLeave').addEventListener('click', async () => {
-    await api('/api/chat/leave', { method: 'POST' });
+    await api('chat/leave', { method: 'POST' });
     views.join.name.value = state.me.name;
     views.join.email.value = state.me.email;
     state.me = null;
@@ -185,7 +186,7 @@
     leaveRoom();
     $('#chatMe').textContent = state.me.name;
     show('groups');
-    const groups = await api('/api/chat/groups').catch(() => []);
+    const groups = await api('chat/groups').catch(() => []);
     $('#groupList').innerHTML = groups.length
       ? groups.map((g) => `
         <li><button class="chat__group" data-group="${g.id}" data-name="${esc(g.name)}" data-desc="${esc(g.description)}">
@@ -203,58 +204,71 @@
 
   const list = $('#messages');
   function msgHtml(m) {
-    const mine = m.userId === state.myId;
+    const mine = m.mine;
     return `<li class="msg ${mine ? 'msg--me' : ''} ${m.admin ? 'msg--admin' : ''}" data-id="${m.id}">
       <div class="msg__meta"><strong>${esc(mine ? 'Ty' : m.name)}</strong>${m.admin ? ' · tým' : ''} · ${fmtTime(m.createdAt)}</div>
       <div class="msg__bubble">${esc(m.text)}</div></li>`;
   }
   const scrollDown = () => (list.scrollTop = list.scrollHeight);
 
-  async function openRoom(group) {
+  // Nové zprávy se načítají opakovaně (polling) – funguje na každém hostingu.
+  const POLL_OPEN = 3000;
+  const POLL_CLOSED = 15000;
+
+  function addMessages(msgs) {
+    let added = 0;
+    for (const m of msgs) {
+      state.since = Math.max(state.since, m.seq);
+      if ($(`[data-id="${m.id}"]`, list)) continue;
+      $('.chat__none', list)?.remove();
+      list.insertAdjacentHTML('beforeend', msgHtml(m));
+      if (!m.mine) added++;
+    }
+    if (msgs.length) scrollDown();
+    return added;
+  }
+
+  async function poll(first = false) {
+    const group = state.group;
+    if (!group) return;
+    try {
+      const data = await api(`chat/messages&group=${group.id}&since=${state.since}`);
+      if (state.group !== group) return;
+      if (first) list.innerHTML = data.messages.length ? '' : '<li class="chat__none">Buď první, kdo napíše! ✨</li>';
+      // Zprávy smazané administrátorem zmizí i tady.
+      const ids = new Set(data.ids);
+      $$('[data-id]', list).forEach((el) => !ids.has(el.dataset.id) && el.remove());
+      const added = addMessages(data.messages);
+      if (!first && added && !chat.classList.contains('chat--open')) { state.unread += added; updateBadge(); }
+    } catch (err) {
+      if (state.group !== group) return;
+      if (err.status === 404) { alert('Tento chat byl smazán.'); return showGroups(); }
+      if (err.status === 401) { state.me = null; leaveRoom(); return show('join'); }
+    }
+    clearTimeout(state.timer);
+    state.timer = setTimeout(poll, document.hidden || !chat.classList.contains('chat--open') ? POLL_CLOSED : POLL_OPEN);
+  }
+
+  function openRoom(group) {
+    leaveRoom();
     state.group = group;
+    state.since = 0;
     $('#chatTitle').textContent = group.name;
     $('#chatSubtitle').textContent = group.description || 'Skupinový chat';
     show('room');
     list.innerHTML = '<li class="chat__none">Načítám…</li>';
-
-    const src = new EventSource(`/api/chat/groups/${group.id}/stream`);
-    state.source = src;
-    src.addEventListener('hello', async (e) => {
-      state.myId = JSON.parse(e.data).me;
-      // Načte historii až po připojení streamu, aby žádná zpráva nevypadla.
-      const msgs = await api(`/api/chat/groups/${group.id}/messages`).catch(() => []);
-      if (state.source !== src) return;
-      list.innerHTML = msgs.length ? msgs.map(msgHtml).join('') : '<li class="chat__none">Buď první, kdo napíše! ✨</li>';
-      scrollDown();
-    });
-    src.addEventListener('message', (e) => {
-      const m = JSON.parse(e.data);
-      if ($(`[data-id="${m.id}"]`, list)) return;
-      $('.chat__none', list)?.remove();
-      list.insertAdjacentHTML('beforeend', msgHtml(m));
-      scrollDown();
-      if (!chat.classList.contains('chat--open')) { state.unread++; updateBadge(); }
-    });
-    src.addEventListener('message-deleted', (e) => $(`[data-id="${JSON.parse(e.data).id}"]`, list)?.remove());
-    src.addEventListener('group-deleted', () => {
-      src.close();
-      alert('Tento chat byl smazán.');
-      showGroups();
-    });
-    src.onerror = async () => {
-      // Pokud vypršelo přihlášení nebo skupina zmizela, vrátí uživatele zpět.
-      if (src.readyState === EventSource.CLOSED) {
-        state.me = await api('/api/chat/me').catch(() => null);
-        state.me ? showGroups() : show('join');
-      }
-    };
+    poll(true);
   }
 
   function leaveRoom() {
-    state.source?.close();
-    state.source = null;
+    clearTimeout(state.timer);
     state.group = null;
   }
+
+  // Po návratu na záložku / otevření chatu se hned podívá po nových zprávách.
+  const pollNow = () => state.group && !document.hidden && (clearTimeout(state.timer), poll());
+  document.addEventListener('visibilitychange', pollNow);
+  $('#chatTab').addEventListener('click', pollNow);
 
   const compose = $('#compose');
   const ta = compose.text;
@@ -269,12 +283,10 @@
     ta.value = '';
     ta.style.height = 'auto';
     try {
-      const m = await api(`/api/chat/groups/${state.group.id}/messages`, { method: 'POST', body: { text } });
-      if (!$(`[data-id="${m.id}"]`, list)) {
-        $('.chat__none', list)?.remove();
-        list.insertAdjacentHTML('beforeend', msgHtml(m));
-        scrollDown();
-      }
+      await api('chat/send', { method: 'POST', body: { group: state.group.id, text } });
+      // Načte novou zprávu i vše, co mezitím napsali ostatní.
+      clearTimeout(state.timer);
+      poll();
     } catch (err) {
       ta.value = text;
       alert(err.message);
