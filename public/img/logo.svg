@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff2e88"/>
+      <stop offset="1" stop-color="#ffb800"/>
+    </linearGradient>
+  </defs>
+  <circle cx="100" cy="100" r="96" fill="#14101f" stroke="url(#g)" stroke-width="8"/>
+  <text x="100" y="112" text-anchor="middle" font-family="Impact, 'Arial Black', sans-serif" font-size="46" fill="url(#g)" transform="rotate(-8 100 100)">CRAZY</text>
+  <text x="100" y="150" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="16" letter-spacing="3" fill="#ffffff">VRANOVICE</text>
+</svg>

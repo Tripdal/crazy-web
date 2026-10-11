@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Crazy Vranovice – taneční skupina</title>
+  <meta name="description" content="Taneční skupina Crazy Vranovice – aktuality, vystoupení, tréninky a chat.">
+  <link rel="icon" href="/img/logo.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/site.css">
+</head>
+<body>
+  <header class="nav" id="nav">
+    <a href="#top" class="nav__brand">
+      <img src="/img/logo.svg" alt="" class="nav__logo" data-logo>
+      <span data-site-name>Crazy Vranovice</span>
+    </a>
+    <button class="nav__toggle" aria-label="Menu" aria-expanded="false" id="navToggle"><span></span><span></span><span></span></button>
+    <nav class="nav__links" id="navLinks">
+      <a href="#aktuality">Aktuality</a>
+      <a href="#o-nas">O nás</a>
+      <a href="#kontakt">Kontakt</a>
+      <button class="btn btn--small" data-open-chat>Chat</button>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero" id="hero">
+      <div class="hero__bg" id="heroBg"></div>
+      <div class="hero__blobs" aria-hidden="true"><i></i><i></i><i></i></div>
+      <div class="hero__content">
+        <img src="/img/logo.svg" alt="Logo" class="hero__logo" data-logo>
+        <h1 class="hero__title" data-site-name>Crazy Vranovice</h1>
+        <p class="hero__tagline" id="tagline">Taneční skupina plná energie, pohybu a radosti</p>
+        <div class="hero__cta">
+          <a href="#aktuality" class="btn">Co je nového</a>
+          <button class="btn btn--ghost" data-open-chat>Napiš nám</button>
+        </div>
+      </div>
+      <a href="#aktuality" class="hero__scroll" aria-label="Posunout dolů"></a>
+    </section>
+
+    <section class="section" id="aktuality">
+      <div class="container">
+        <h2 class="section__title"><span>Aktuality</span></h2>
+        <div class="news" id="newsList">
+          <div class="news__empty">Načítám…</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section--alt" id="o-nas">
+      <div class="container about">
+        <h2 class="section__title"><span>O nás</span></h2>
+        <div class="about__text rich" id="about"></div>
+      </div>
+    </section>
+
+    <section class="section" id="kontakt">
+      <div class="container">
+        <h2 class="section__title"><span>Kontakt</span></h2>
+        <div class="contact" id="contact"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>© <span id="year"></span> <span data-site-name>Crazy Vranovice</span></p>
+  </footer>
+
+  <!-- Detail aktuality -->
+  <div class="modal" id="newsModal" hidden>
+    <div class="modal__backdrop" data-close></div>
+    <article class="modal__box" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <button class="modal__close" data-close aria-label="Zavřít">×</button>
+      <img class="modal__cover" id="modalCover" alt="">
+      <div class="modal__body">
+        <time class="modal__date" id="modalDate"></time>
+        <h3 class="modal__title" id="modalTitle"></h3>
+        <div class="rich" id="modalContent"></div>
+      </div>
+    </article>
+  </div>
+
+  <!-- Chat -->
+  <aside class="chat" id="chat" aria-label="Chat">
+    <button class="chat__tab" id="chatTab" aria-expanded="false" aria-controls="chatPanel">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8l-4 4V6a2 2 0 0 1 2-2z"/></svg>
+      <span>Chat</span>
+    </button>
+    <div class="chat__panel" id="chatPanel">
+      <header class="chat__head">
+        <button class="chat__back" id="chatBack" aria-label="Zpět na skupiny" hidden>←</button>
+        <div class="chat__heading">
+          <strong id="chatTitle">Chat</strong>
+          <small id="chatSubtitle"></small>
+        </div>
+        <button class="chat__close" id="chatClose" aria-label="Zavřít chat">×</button>
+      </header>
+
+      <!-- 1) Přihlášení -->
+      <form class="chat__view chat__join" id="chatJoin" hidden>
+        <p class="chat__intro">Ahoj! 👋 Než začneš psát, řekni nám, jak se jmenuješ.</p>
+        <label>Jméno<input name="name" required minlength="2" maxlength="40" autocomplete="name"></label>
+        <label>E‑mail<input name="email" type="email" required autocomplete="email"></label>
+        <label class="chat__consent"><input type="checkbox" name="consent" required> Souhlasím s uložením jména a e‑mailu pro účely chatu. E‑mail neuvidí ostatní uživatelé.</label>
+        <button class="btn" type="submit">Vstoupit do chatu</button>
+        <p class="chat__error" id="joinError"></p>
+      </form>
+
+      <!-- 2) Výběr skupiny -->
+      <div class="chat__view" id="chatGroups" hidden>
+        <p class="chat__hello">Přihlášen(a) jako <strong id="chatMe"></strong> · <button class="link" id="chatLeave">změnit</button></p>
+        <ul class="chat__groups" id="groupList"></ul>
+      </div>
+
+      <!-- 3) Konverzace -->
+      <div class="chat__view chat__room" id="chatRoom" hidden>
+        <ol class="chat__messages" id="messages"></ol>
+        <form class="chat__compose" id="compose">
+          <textarea name="text" rows="1" maxlength="1000" placeholder="Napiš zprávu…" required></textarea>
+          <button class="chat__send" aria-label="Odeslat">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M3 20.5 21 12 3 3.5v6.6l12 1.9-12 1.9z"/></svg>
+          </button>
+        </form>
+      </div>
+    </div>
+  </aside>
+
+  <script src="/js/site.js"></script>
+</body>
+</html>

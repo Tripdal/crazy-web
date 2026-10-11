@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Administrace – Crazy Vranovice</title>
+  <link rel="icon" href="/img/logo.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/vendor/quill/quill.snow.css">
+  <link rel="stylesheet" href="/admin/admin.css">
+</head>
+<body>
+  <!-- Přihlášení -->
+  <main class="login" id="login" hidden>
+    <form class="login__box" id="loginForm">
+      <img src="/img/logo.svg" alt="" class="login__logo" data-logo>
+      <h1>Administrace</h1>
+      <p>Zadejte heslo a můžete začít upravovat web.</p>
+      <input type="password" name="password" placeholder="Heslo" required autofocus autocomplete="current-password">
+      <button class="btn btn--primary btn--big">Přihlásit se</button>
+      <p class="login__error" id="loginError"></p>
+      <a href="/" class="login__back">← Zpět na web</a>
+    </form>
+  </main>
+
+  <!-- Aplikace -->
+  <div class="app" id="app" hidden>
+    <header class="top">
+      <div class="top__brand"><img src="/img/logo.svg" alt="" data-logo><span>Administrace</span></div>
+      <nav class="tabs" role="tablist">
+        <button class="tab" role="tab" data-tab="news"><span class="tab__icon">📰</span> Aktuality</button>
+        <button class="tab" role="tab" data-tab="chats"><span class="tab__icon">💬</span> Chaty</button>
+        <button class="tab" role="tab" data-tab="settings"><span class="tab__icon">⚙️</span> Nastavení</button>
+      </nav>
+      <div class="top__actions">
+        <a href="/" target="_blank" class="btn btn--light">Zobrazit web ↗</a>
+        <button class="btn btn--light" id="logout">Odhlásit</button>
+      </div>
+    </header>
+
+    <!-- ===================== AKTUALITY ===================== -->
+    <section class="panel" data-panel="news">
+      <div class="news-layout">
+        <aside class="news-side">
+          <button class="btn btn--primary btn--big btn--block" id="newNews">＋ Nová aktualita</button>
+          <ul class="news-list" id="newsList"></ul>
+        </aside>
+
+        <div class="news-main">
+          <div class="empty" id="newsEmpty">
+            <div class="empty__icon">✍️</div>
+            <h2>Vyberte aktualitu vlevo</h2>
+            <p>…nebo klikněte na <strong>＋ Nová aktualita</strong> a napište novou.</p>
+          </div>
+
+          <form class="editor" id="newsForm" hidden>
+            <div class="editor__bar">
+              <span class="editor__status" id="newsStatus"></span>
+              <div class="editor__bar-actions">
+                <button type="button" class="btn btn--danger-ghost" id="deleteNews">🗑 Smazat</button>
+                <button type="submit" class="btn btn--primary">💾 Uložit</button>
+              </div>
+            </div>
+
+            <label class="field">
+              <span class="field__label">Nadpis</span>
+              <input class="field__title" name="title" placeholder="Např. Vystoupení na hodech ve Vranovicích" maxlength="200" required>
+            </label>
+
+            <div class="field">
+              <span class="field__label">Hlavní obrázek <small>(nepovinné – zobrazí se na kartičce aktuality)</small></span>
+              <div class="dropzone" id="coverDrop" tabindex="0">
+                <img id="coverPreview" alt="">
+                <div class="dropzone__hint" id="coverHint">
+                  <strong>📷 Klikněte nebo sem přetáhněte obrázek</strong>
+                  <small>JPG, PNG, GIF i animované GIFy, max. 15 MB</small>
+                </div>
+                <button type="button" class="dropzone__remove" id="coverRemove">Odebrat</button>
+                <input type="file" accept="image/*" hidden id="coverInput">
+              </div>
+            </div>
+
+            <div class="field">
+              <span class="field__label">Text aktuality</span>
+              <p class="tip">💡 Obrázky a GIFy vložíte tlačítkem <b>🖼</b> v liště, nebo je jednoduše <b>přetáhněte či vložte (Ctrl+V)</b> přímo do textu.</p>
+              <div id="newsEditor" class="quill-box"></div>
+            </div>
+
+            <div class="switches">
+              <label class="switch"><input type="checkbox" name="published" checked><span class="switch__ui"></span><span><b>Zveřejnit na webu</b><small>Když je vypnuto, aktualita se uloží jako koncept.</small></span></label>
+              <label class="switch"><input type="checkbox" name="pinned"><span class="switch__ui"></span><span><b>Připnout nahoru</b><small>Aktualita bude vždy první.</small></span></label>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== CHATY ===================== -->
+    <section class="panel" data-panel="chats" hidden>
+      <div class="wrap">
+        <form class="card add-group" id="groupForm">
+          <h2>Nová chatovací skupina</h2>
+          <div class="add-group__row">
+            <input name="name" placeholder="Název, např. Rodiče, Juniorky, Vystoupení…" maxlength="60" required>
+            <input name="description" placeholder="Krátký popis (nepovinné)" maxlength="200">
+            <button class="btn btn--primary">＋ Přidat skupinu</button>
+          </div>
+        </form>
+
+        <div class="groups" id="groups"></div>
+      </div>
+
+      <!-- Zprávy ve skupině -->
+      <div class="drawer" id="drawer" hidden>
+        <div class="drawer__backdrop" data-close-drawer></div>
+        <aside class="drawer__box">
+          <header class="drawer__head">
+            <div><h3 id="drawerTitle"></h3><small>Zprávy můžete mazat nebo odpovědět jménem skupiny.</small></div>
+            <button class="icon-btn" data-close-drawer aria-label="Zavřít">×</button>
+          </header>
+          <ol class="admin-msgs" id="adminMsgs"></ol>
+          <form class="drawer__compose" id="adminCompose">
+            <textarea name="text" rows="2" placeholder="Odpovědět jako tým…" maxlength="1000" required></textarea>
+            <button class="btn btn--primary">Odeslat</button>
+          </form>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ===================== NASTAVENÍ ===================== -->
+    <section class="panel" data-panel="settings" hidden>
+      <form class="wrap settings" id="settingsForm">
+        <div class="card">
+          <h2>Vzhled</h2>
+          <div class="images-row">
+            <div class="field">
+              <span class="field__label">Logo skupiny</span>
+              <div class="dropzone dropzone--logo" data-img-field="logo" tabindex="0">
+                <img alt="">
+                <div class="dropzone__hint"><strong>Změnit logo</strong><small>Klikněte nebo přetáhněte</small></div>
+                <input type="file" accept="image/*" hidden>
+              </div>
+            </div>
+            <div class="field grow">
+              <span class="field__label">Obrázek na pozadí úvodu <small>(nepovinné)</small></span>
+              <div class="dropzone dropzone--wide" data-img-field="heroImage" tabindex="0">
+                <img alt="">
+                <div class="dropzone__hint"><strong>📷 Klikněte nebo přetáhněte fotku</strong><small>Ideálně fotka z vystoupení na šířku</small></div>
+                <button type="button" class="dropzone__remove">Odebrat</button>
+                <input type="file" accept="image/*" hidden>
+              </div>
+            </div>
+          </div>
+          <label class="field"><span class="field__label">Název skupiny</span><input name="siteName" maxlength="100" required></label>
+          <label class="field"><span class="field__label">Podtitul na úvodu</span><input name="tagline" maxlength="300"></label>
+        </div>
+
+        <div class="card">
+          <h2>O nás</h2>
+          <div id="aboutEditor" class="quill-box quill-box--small"></div>
+        </div>
+
+        <div class="card">
+          <h2>Kontakt</h2>
+          <div class="grid2">
+            <label class="field"><span class="field__label">E‑mail</span><input name="contactEmail" type="email"></label>
+            <label class="field"><span class="field__label">Telefon</span><input name="contactPhone"></label>
+            <label class="field"><span class="field__label">Adresa / místo tréninků</span><input name="address"></label>
+            <label class="field"><span class="field__label">Kdy trénujeme</span><textarea name="trainingTimes" rows="2" placeholder="Út 17:00–18:30, Čt 17:00–18:30"></textarea></label>
+            <label class="field"><span class="field__label">Facebook (odkaz)</span><input name="facebookUrl" type="url" placeholder="https://www.facebook.com/…"></label>
+            <label class="field"><span class="field__label">Instagram (odkaz)</span><input name="instagramUrl" type="url" placeholder="https://www.instagram.com/…"></label>
+          </div>
+        </div>
+
+        <div class="sticky-save"><button class="btn btn--primary btn--big">💾 Uložit nastavení</button></div>
+      </form>
+
+      <form class="wrap card password" id="passwordForm">
+        <h2>Změna hesla do administrace</h2>
+        <div class="grid2">
+          <label class="field"><span class="field__label">Současné heslo</span><input type="password" name="current" required autocomplete="current-password"></label>
+          <label class="field"><span class="field__label">Nové heslo</span><input type="password" name="next" required minlength="6" autocomplete="new-password"></label>
+        </div>
+        <button class="btn btn--light">Změnit heslo</button>
+      </form>
+    </section>
+  </div>
+
+  <!-- Potvrzovací dialog -->
+  <div class="dialog" id="dialog" hidden>
+    <div class="dialog__box" role="alertdialog" aria-modal="true">
+      <div class="dialog__icon">⚠️</div>
+      <h3 id="dialogTitle"></h3>
+      <p id="dialogText"></p>
+      <div class="dialog__actions">
+        <button class="btn btn--light" data-answer="no">Zrušit</button>
+        <button class="btn btn--danger" data-answer="yes" id="dialogYes">Smazat</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts"></div>
+
+  <script src="/vendor/quill/quill.js"></script>
+  <script src="/admin/admin.js"></script>
+</body>
+</html>
